@@ -6,7 +6,6 @@ contract InfoManage {
         address addr;
         string username;
         string teleNumber;
-        bytes32 password;
         string profile;
         uint registerTime;
     }
@@ -15,7 +14,6 @@ contract InfoManage {
         address addr;
         string username;
         string teleNumber;
-        bytes32 password;
         string profile;
         uint registerTime;
         uint finishedTaskNum;
@@ -25,8 +23,8 @@ contract InfoManage {
     struct Task {
         uint index;//start from 0
         address rider;
-        uint startPoint;
-        uint endPoint;
+        uint pickupLocation;
+        uint pickoffLocation;
         uint minReputation;
         uint reward;
         uint deposit;
@@ -37,8 +35,8 @@ contract InfoManage {
     enum Status {
         Unclaimed,
         Claimed,
-        ReachedStartPoint,
-        ReachedEndPoint,
+        ReachedPickupLocation,
+        ReachedpickoffLocation,
         Completed
     }
 
@@ -54,25 +52,16 @@ contract InfoManage {
             return driverList[addr].addr > address(0x0) ? false : true ;
     }
 
-    function riderRegister(address addr, string memory username, string memory teleNumber, string memory password, string memory profile) public {
+    function riderRegister(address addr, string memory username, string memory teleNumber, string memory profile) public {
         require(checkRegister("rider", addr));
-        riderList[addr] = Rider(addr, username, teleNumber, keccak256(abi.encodePacked(password)), profile, block.timestamp);
+        riderList[addr] = Rider(addr, username, teleNumber, profile, block.timestamp);
     }
 
-    function login(string memory userType, address addr, string memory password) public view returns (bool) {
-        require(!checkRegister(userType, addr));
-        if(keccak256(abi.encodePacked(userType)) == keccak256(abi.encodePacked("rider"))) {
-            return riderList[addr].password == keccak256(abi.encodePacked(password));
-        }
-        else {
-            return driverList[addr].password == keccak256(abi.encodePacked(password));
-        }
-    }
 
-    function driverRegister(address addr, string memory username, string memory teleNumber, string memory password, string memory profile) public {
+    function driverRegister(address addr, string memory username, string memory teleNumber, string memory profile) public {
         require(checkRegister("driver", addr));
         //driver's initial reputation: 60
-        driverList[addr] = Driver(addr, username, teleNumber, keccak256(abi.encodePacked(password)), profile, block.timestamp, 0, 60);
+        driverList[addr] = Driver(addr, username, teleNumber, profile, block.timestamp, 0, 60);
     }
 
     function getRiderInfo(address addr) public view returns (address, string memory, string memory, string memory, uint) {
@@ -83,15 +72,6 @@ contract InfoManage {
     function getDriverInfo(address addr) public view returns (address, string memory, string memory, string memory, uint, uint, uint) {
         require(!checkRegister("driver", addr));
         return (driverList[addr].addr, driverList[addr].username, driverList[addr].teleNumber, driverList[addr].profile, driverList[addr].registerTime, driverList[addr].finishedTaskNum, driverList[addr].reputation);
-    }
-
-    function updatePassword(string memory userType, address addr, string memory newPassword) public {
-        require(addr == msg.sender);
-        require(!checkRegister(userType, addr));
-        if(keccak256(abi.encodePacked(userType)) == keccak256(abi.encodePacked("rider")))
-            riderList[addr].password = keccak256(abi.encodePacked(newPassword));
-        else 
-            driverList[addr].password = keccak256(abi.encodePacked(newPassword));
     }
 
     function updateProfile(string memory userType, address addr, string memory newProfile) public {
@@ -129,13 +109,13 @@ contract RideHailing is InfoManage{
         return uint(((_longitude - initLongitude) / blockUint) * rowSize + ((_latitude - initLatitude) / blockUint)); 
     }
 
-    function calculateReward(uint _startPoint, uint _endPoint) public view returns(uint) {
-        uint distance = _startPoint - _endPoint > 0 ? _startPoint - _endPoint : _endPoint - _startPoint;
+    function calculateReward(uint _pickupLocation, uint _pickoffLocation) public view returns(uint) {
+        uint distance = _pickupLocation - _pickoffLocation > 0 ? _pickupLocation - _pickoffLocation : _pickoffLocation - _pickupLocation;
         return distance * rewardPerBlock;
     }
 
-    function calculateDeposit(uint _startPoint, uint _endPoint) public view returns(uint) {
-        uint distance = _startPoint - _endPoint > 0 ? _startPoint - _endPoint : _endPoint - _startPoint;
+    function calculateDeposit(uint _pickupLocation, uint _pickoffLocation) public view returns(uint) {
+        uint distance = _pickupLocation - _pickoffLocation > 0 ? _pickupLocation - _pickoffLocation : _pickoffLocation - _pickupLocation;
         return distance * rewardPerBlock;
     }
 
@@ -155,7 +135,7 @@ contract RideHailing is InfoManage{
 
     function getTaskInfo(uint taskId) public view returns (uint, address, uint, uint, uint, uint, uint, address, Status) {
         Task memory _task = taskList[taskId];
-        return (_task.index, _task.rider, _task.startPoint, _task.endPoint, _task.minReputation, _task.reward, _task.deposit, _task.driver, _task.status);
+        return (_task.index, _task.rider, _task.pickupLocation, _task.pickoffLocation, _task.minReputation, _task.reward, _task.deposit, _task.driver, _task.status);
     }
 
     function receiveTask(uint taskId) public payable {
@@ -179,26 +159,26 @@ contract RideHailing is InfoManage{
         require(proofReachPickupLocation(taskId));
 
         //update task's status
-        taskList[taskId].status = Status.ReachedStartPoint;
+        taskList[taskId].status = Status.ReachedPickupLocation;
 
         //return deposit
         msg.sender.transfer(taskList[taskId].deposit);
     }
 
-    function proofReachEndPoint(uint taskId) public pure returns (bool) {
+    function proofReachpickoffLocation(uint taskId) public pure returns (bool) {
 
         return true;
     }
 
-    function reachEndPoint(uint taskId) public {
-        require(proofReachEndPoint(taskId));
+    function reachpickoffLocation(uint taskId) public {
+        require(proofReachpickoffLocation(taskId));
 
         //update task's status
-        taskList[taskId].status = Status.ReachedEndPoint;
+        taskList[taskId].status = Status.ReachedpickoffLocation;
     }
 
     function calculateReputation(uint taskId) public view returns (uint) {
-        if(proofReachEndPoint(taskId))
+        if(proofReachpickoffLocation(taskId))
             return driverList[msg.sender].reputation + 1;
         else
             return driverList[msg.sender].reputation > 0 ? driverList[msg.sender].reputation - 5 : 0; 
@@ -208,7 +188,7 @@ contract RideHailing is InfoManage{
         //update reputation
         driverList[msg.sender].reputation = calculateReputation(taskId);
 
-        require(proofReachEndPoint(taskId));
+        require(proofReachpickoffLocation(taskId));
         msg.sender.transfer(taskList[taskId].reward);
 
         //update task's status
